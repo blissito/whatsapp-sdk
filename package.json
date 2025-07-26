@@ -1,0 +1,47 @@
+{
+  "name": "@formmy/whatsapp-sdk",
+  "version": "0.0.01",
+  "description": "TypeScript SDK for WhatsApp Business API with Effect-TS by Fixtergeek",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\""
+  },
+  "peerDependencies": {
+    "effect": "^2.0.0",
+    "@effect/platform": "^0.40.0",
+    "@effect/schema": "^0.60.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^1.0.0",
+    "@types/vitest": "^1.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0"
+  },
+  "keywords": [
+    "whatsapp",
+    "api",
+    "sdk",
+    "effect-ts",
+    "typescript"
+  ],
+  "author": "@blissito",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/blissito/whatsapp-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/blissito/whatsapp-sdk/issues"
+  },
+  "homepage": "https://github.com/blissito/whatsapp-sdk#readme"
+}
