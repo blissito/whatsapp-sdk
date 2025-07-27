@@ -1,92 +1,120 @@
-import { Schema } from "@effect/schema";
-import { Effect } from "effect";
+import * as S from "@effect/schema";
+import { Schema } from "effect";
 
-export class WhatsAppError extends Schema.Class<WhatsAppError>("WhatsAppError")({
-  message: Schema.String,
-  cause: Schema.optional(Schema.Unknown),
-  code: Schema.optional(Schema.String),
-}) {
-  static of(message: string, options: { cause?: unknown; code?: string } = {}) {
-    return new WhatsAppError({
-      message,
-      cause: options.cause,
-      code: options.code,
-    });
-  }
+/**
+ * Configuration for the WhatsApp client
+ */
+export interface WhatsAppConfig {
+  /** The phone number ID provided by Meta */
+  phoneNumberId: string;
+  /** The access token for the WhatsApp Business API */
+  accessToken: string;
+  /** The base URL for the WhatsApp API (defaults to https://graph.facebook.com) */
+  baseUrl?: string;
+  /** The API version to use (defaults to v17.0) */
+  apiVersion?: string;
 }
 
-export class ApiError extends WhatsAppError {
-  readonly _tag = "ApiError";
+/**
+ * Standard error response from the WhatsApp API
+ */
+export interface ErrorResponse {
+  error: {
+    message: string;
+    type: string;
+    code: number;
+    error_subcode?: number;
+    fbtrace_id: string;
+  };
+}
+
+/**
+ * Response when sending a message
+ */
+export interface MessageResponse {
+  messaging_product: "whatsapp";
+  contacts: Array<{
+    input: string;
+    wa_id: string;
+  }>;
+  messages: Array<{
+    id: string;
+  }>;
+}
+
+/**
+ * Response when uploading media
+ */
+export interface MediaUploadResponse {
+  id: string;
+}
+
+/**
+ * Response when getting media info
+ */
+export interface MediaInfoResponse {
+  messaging_product: "whatsapp";
+  url: string;
+  mime_type: string;
+  sha256: string;
+  file_size: number;
+  id: string;
+}
+
+/**
+ * Custom error class for API errors
+ */
+export class ApiError extends Error {
   constructor(
-    public readonly status: number,
-    public readonly response: unknown,
-    message: string,
-    options: { cause?: unknown; code?: string } = {}
+    public status: number,
+    public cause: unknown,
+    message?: string
   ) {
-    super({ message, ...options });
+    super(message || `API request failed with status ${status}`);
+    this.name = 'ApiError';
   }
 }
 
-export class ValidationError extends WhatsAppError {
-  readonly _tag = "ValidationError";
-  constructor(message: string, public readonly details?: unknown) {
-    super({ message, code: "VALIDATION_ERROR" });
+/**
+ * Custom error class for WhatsApp specific errors
+ */
+export class WhatsAppError extends Error {
+  constructor(
+    message: string,
+    public cause?: unknown
+  ) {
+    super(message);
+    this.name = 'WhatsAppError';
   }
 }
 
-export class ConfigurationError extends WhatsAppError {
-  readonly _tag = "ConfigurationError";
-  constructor(message: string, public readonly details?: unknown) {
-    super({ message, code: "CONFIGURATION_ERROR" });
-  }
-}
-
-// Tipos y esquemas para mensajes
+// Schema for validating message responses
 export const MessageResponseSchema = Schema.Struct({
   messaging_product: Schema.Literal("whatsapp"),
   contacts: Schema.Array(
     Schema.Struct({
       input: Schema.String,
-      wa_id: Schema.String,
+      wa_id: Schema.String
     })
   ),
   messages: Schema.Array(
     Schema.Struct({
-      id: Schema.String,
-      message_status: Schema.optional(
-        Schema.Union([
-          Schema.Literal("accepted"),
-          Schema.Literal("sent"),
-          Schema.Literal("delivered"),
-          Schema.Literal("read"),
-          Schema.Literal("failed"),
-        ])
-      ),
+      id: Schema.String
     })
-  ),
+  )
 });
 
-export type MessageResponse = Schema.Schema.Type<typeof MessageResponseSchema>;
+// Schema for validating media upload responses
+export const MediaUploadResponseSchema = Schema.Struct({
+  id: Schema.String
+});
 
-export interface WhatsAppConfig {
-  phoneNumberId: string;
-  accessToken: string;
-  apiVersion: string;
-  businessAccountId?: string;
-  webhookVerifyToken?: string;
-  maxRetries?: number;
-  retryDelayMs?: number;
-  baseUrl?: string;
-}
-
-export interface WhatsAppClient {
-  sendTextMessage(phoneNumber: string, text: string): Effect.Effect<MessageResponse, WhatsAppError>;
-  // ... otros métodos del cliente
-}
-
-export const defaultConfig: Partial<WhatsAppConfig> = {
-  apiVersion: "v17.0",
-  baseUrl: "https://graph.facebook.com",
-  maxRetries: 3,
-  retryDelayMs: 1000,
-};
+// Schema for validating media info responses
+export const MediaInfoResponseSchema = Schema.Struct({
+  messaging_product: Schema.Literal("whatsapp"),
+  url: Schema.String,
+  mime_type: Schema.String,
+  sha256: Schema.String,
+  file_size: Schema.Number,
+  id: Schema.String
+});

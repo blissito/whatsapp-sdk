@@ -1,285 +1,143 @@
-import { Effect, pipe } from "effect";
-import * as Schema from "@effect/schema/Schema";
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect-http";
-import * as HttpBody from "effect-http/Body";
-import { WhatsAppConfig } from "../core/types";
-import { ApiError, MessageResponse, MessageResponseSchema } from "../core/types";
+import { Effect, pipe, Context, Layer } from "effect";
 
-// Esquema para respuestas de error de la API
-export const ErrorResponseSchema = Schema.Struct({
-  error: Schema.Struct({
-    message: Schema.String,
-    type: Schema.String,
-    code: Schema.Number,
-    error_subcode: Schema.optional(Schema.Number),
-    fbtrace_id: Schema.optional(Schema.String),
-  }),
-});
+import { 
+  WhatsAppConfig, 
+  ApiError, 
+  MessageResponse, 
+  MediaUploadResponse, 
+  MediaInfoResponse
+} from "../core/types";
 
-type ErrorResponse = Schema.Schema.Type<typeof ErrorResponseSchema>;
+/**
+ * Creates an HTTP client for interacting with the WhatsApp Business API
+ */
+export const makeWhatsAppHttpClient = (config: WhatsAppConfig) => {
+  const baseUrl = config.baseUrl || "https://graph.facebook.com";
+  const version = config.apiVersion || "v17.0";
+  const token = config.accessToken;
 
-// Esquema para respuestas de carga de medios
-export const MediaUploadResponseSchema = Schema.Struct({
-  id: Schema.String,
-});
-
-type MediaUploadResponse = Schema.Schema.Type<typeof MediaUploadResponseSchema>;
-
-// Esquema para información de medios
-export const MediaInfoResponseSchema = Schema.Struct({
-  messaging_product: Schema.Literal("whatsapp"),
-  url: Schema.String,
-  mime_type: Schema.String,
-  sha256: Schema.String,
-  file_size: Schema.Number,
-  id: Schema.String,
-});
-
-type MediaInfoResponse = Schema.Schema.Type<typeof MediaInfoResponseSchema>;
-
-export class WhatsAppHttpClient {
-  constructor(
-    private readonly config: WhatsAppConfig,
-    private readonly httpClient: HttpClient.HttpClient
-  ) {}
-
-  private handleHttpError = (
-    error: HttpClientResponse.HttpClientResponse
-  ): Effect.Effect<never, ApiError> =>
-    Effect.gen(function* (_) {
-      const responseText = yield* _(
-        Effect.tryPromise({
-          try: () => error.text,
-          catch: () => Effect.succeed("Failed to read response text"),
-        })
-      );
-
-      // Intentar analizar como respuesta de error de la API de WhatsApp
-      let parsedResponse;
-      try {
-        parsedResponse = JSON.parse(responseText);
-      } catch {
-        parsedResponse = {
-          error: { message: responseText, type: "unknown", code: error.status },
-        };
+  // Helper function to make HTTP requests
+  const request = <A>(method: "GET" | "POST", path: string, body?: unknown) => {
+    return Effect.gen(function*() {
+      const url = `${baseUrl}/${version}${path}`;
+      
+      const options: RequestInit = {
+        method,
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      };
+      
+      if (method === "POST" && body) {
+        options.body = JSON.stringify(body);
       }
+      
+      try {
+        const response = yield* Effect.tryPromise({
+          try: () => fetch(url, options),
+          catch: (error) => new Error(`Request failed: ${error}`)
+        });
+        
+        const responseText = yield* Effect.tryPromise({
+          try: () => response.text(),
+          catch: (error) => new Error(`Failed to read response: ${error}`)
+        });
+        
+        if (response.status >= 200 && response.status < 300) {
+          try {
+            return JSON.parse(responseText) as A;
+          } catch (e) {
+            return responseText as unknown as A;
+          }
+        } else {
+          throw new Error(`HTTP ${response.status}: ${responseText}`);
+        }
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new ApiError(500, error, error.message);
+        }
+        throw new ApiError(500, new Error(String(error)), 'Request failed');
+      }
+    }).pipe(
+      Effect.mapError((error: unknown) => {
+        if (error instanceof Error) {
+          return new ApiError(500, error, error.message);
+        }
+        return new ApiError(500, new Error(String(error)), 'Request failed');
+      })
+    );
+  };
 
-      const errorResponse = yield* _(
-        Schema.decodeUnknown(ErrorResponseSchema)(parsedResponse).pipe(
-          Effect.catchAll(() =>
-            Effect.succeed({
-              error: {
-                message: responseText || "Unknown API error",
-                type: "unknown",
-                code: error.status,
-              },
-            })
+  return {
+    /**
+     * Send a text message
+     */
+    sendTextMessage: (phoneNumber: string, text: string) => 
+      request<MessageResponse>("POST", `/${config.phoneNumberId}/messages`, {
+        messaging_product: "whatsapp",
+        to: phoneNumber,
+        type: "text",
+        text: { body: text }
+      }),
+
+    /**
+     * Upload media to WhatsApp
+     */
+    uploadMedia: (media: { data: Uint8Array; type: string }) => 
+      request<MediaUploadResponse>("POST", `/${config.phoneNumberId}/media`, {
+        messaging_product: "whatsapp",
+        file: media.data,
+        type: media.type
+      }),
+
+    /**
+     * Get media information
+     */
+    getMediaInfo: (mediaId: string) => 
+      request<MediaInfoResponse>("GET", `/${mediaId}?phone_number_id=${config.phoneNumberId}`),
+
+    /**
+     * Download media
+     */
+    downloadMedia: (mediaUrl: string) => {
+      return Effect.gen(function*() {
+        const options: RequestInit = {
+          method: 'GET',
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        };
+        
+        const response = yield* Effect.tryPromise({
+          try: () => fetch(mediaUrl, options),
+          catch: (error) => new Error(`Request failed: ${error}`)
+        });
+        
+        const arrayBuffer = yield* Effect.tryPromise({
+          try: () => response.arrayBuffer(),
+          catch: (error) => new Error(`Failed to read response: ${error}`)
+        });
+        
+        return Buffer.from(arrayBuffer);
+      }).pipe(
+        Effect.mapError(error => 
+          new ApiError(
+            500,
+            error instanceof Error ? error : new Error(String(error)),
+            `Failed to download media: ${error instanceof Error ? error.message : String(error)}`
           )
         )
       );
+    }
+  };
+};
 
-      return yield* _(
-        Effect.fail(
-          new ApiError(
-            error.status,
-            errorResponse,
-            errorResponse.error.message,
-            { code: errorResponse.error.code.toString() }
-          )
-        )
-      );
-    });
-
-  // Método para enviar mensajes
-  sendMessage = (
-    payload: unknown
-  ): Effect.Effect<MessageResponse, ApiError> =>
-    Effect.gen(function* (this: WhatsAppHttpClient) {
-      const url = this.buildApiUrl("messages");
-      const headers = this.createAuthHeaders();
-
-      const request = HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeaders(headers),
-        HttpClientRequest.setBody(HttpBody.json(payload))
-      );
-
-      const response = yield* this.httpClient
-        .execute(request)
-        .pipe(
-          Effect.flatMap((response) =>
-            response.status >= 200 && response.status < 300
-              ? Effect.succeed(response)
-              : this.handleHttpError(response)
-          )
-        );
-
-      const responseBody = yield* Effect.tryPromise({
-        try: () => response.json,
-        catch: (error) =>
-          new ApiError(
-            response.status,
-            error,
-            "Failed to parse response JSON"
-          ),
-      });
-
-      return yield* Schema.decodeUnknown(MessageResponseSchema)(responseBody).pipe(
-        Effect.mapError(
-          (error) =>
-            new ApiError(
-              response.status,
-              responseBody,
-              `Invalid response format: ${error.message}`
-            )
-        )
-      );
-    });
-
-  // Método para cargar medios
-  uploadMedia = (
-    formData: FormData
-  ): Effect.Effect<MediaUploadResponse, ApiError> =>
-    Effect.gen(function* (this: WhatsAppHttpClient) {
-      const url = this.buildBusinessApiUrl("media");
-      const headers = this.createMediaUploadHeaders();
-
-      const request = HttpClientRequest.post(url).pipe(
-        HttpClientRequest.setHeaders(headers),
-        HttpClientRequest.setBody(HttpBody.formData(formData))
-      );
-
-      const response = yield* this.httpClient
-        .execute(request)
-        .pipe(
-          Effect.flatMap((response) =>
-            response.status >= 200 && response.status < 300
-              ? Effect.succeed(response)
-              : this.handleHttpError(response)
-          )
-        );
-
-      const responseBody = yield* Effect.tryPromise({
-        try: () => response.json,
-        catch: (error) =>
-          new ApiError(
-            response.status,
-            error,
-            "Failed to parse media upload response JSON"
-          ),
-      });
-
-      return yield* Schema.decodeUnknown(MediaUploadResponseSchema)(
-        responseBody
-      ).pipe(
-        Effect.mapError(
-          (error) =>
-            new ApiError(
-              response.status,
-              responseBody,
-              `Invalid media upload response format: ${error.message}`
-            )
-        )
-      );
-    });
-
-  // Método para obtener información de un medio
-  getMedia = (mediaId: string): Effect.Effect<MediaInfoResponse, ApiError> =>
-    Effect.gen(function* (this: WhatsAppHttpClient) {
-      const url = `${this.config.baseUrl}/${this.config.apiVersion}/${mediaId}`;
-      const headers = this.createAuthHeaders();
-
-      const request = HttpClientRequest.get(url).pipe(
-        HttpClientRequest.setHeaders(headers)
-      );
-
-      const response = yield* this.httpClient
-        .execute(request)
-        .pipe(
-          Effect.flatMap((response) =>
-            response.status >= 200 && response.status < 300
-              ? Effect.succeed(response)
-              : this.handleHttpError(response)
-          )
-        );
-
-      const responseBody = yield* Effect.tryPromise({
-        try: () => response.json,
-        catch: (error) =>
-          new ApiError(
-            response.status,
-            error,
-            "Failed to parse media info response JSON"
-          ),
-      });
-
-      return yield* Schema.decodeUnknown(MediaInfoResponseSchema)(
-        responseBody
-      ).pipe(
-        Effect.mapError(
-          (error) =>
-            new ApiError(
-              response.status,
-              responseBody,
-              `Invalid media info response format: ${error.message}`
-            )
-        )
-      );
-    });
-
-  // Método para descargar un medio
-  downloadMedia = (mediaUrl: string): Effect.Effect<Uint8Array, ApiError> =>
-    Effect.gen(function* (this: WhatsAppHttpClient) {
-      const headers = this.createAuthHeaders();
-
-      const request = HttpClientRequest.get(mediaUrl).pipe(
-        HttpClientRequest.setHeaders(headers)
-      );
-
-      const response = yield* this.httpClient
-        .execute(request)
-        .pipe(
-          Effect.flatMap((response) =>
-            response.status >= 200 && response.status < 300
-              ? Effect.succeed(response)
-              : this.handleHttpError(response)
-          )
-        );
-
-      return yield* Effect.tryPromise({
-        try: () => response.arrayBuffer.then((buffer) => new Uint8Array(buffer)),
-        catch: (error) =>
-          new ApiError(
-            response.status,
-            error,
-            "Failed to download media content"
-          ),
-      });
-    });
-
-  // Métodos de utilidad privados
-  private buildApiUrl(endpoint: string): string {
-    return `${this.config.baseUrl}/${this.config.apiVersion}/${this.config.phoneNumberId}/${endpoint}`;
-  }
-
-  private buildBusinessApiUrl(endpoint: string): string {
-    return `${this.config.baseUrl}/${this.config.apiVersion}/${this.config.businessAccountId}/${endpoint}`;
-  }
-
-  private createAuthHeaders(): Record<string, string> {
-    return {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${this.config.accessToken}`,
-    };
-  }
-
-  private createMediaUploadHeaders(): Record<string, string> {
-    return {
-      Authorization: `Bearer ${this.config.accessToken}`,
-    };
-  }
+// Create a context tag for dependency injection
+export class WhatsAppHttpClient extends Context.Tag("WhatsAppHttpClient")<
+  WhatsAppHttpClient,
+  ReturnType<typeof makeWhatsAppHttpClient>
+>() {
+  static Live = (config: WhatsAppConfig) => 
+    Layer.succeed(WhatsAppHttpClient, makeWhatsAppHttpClient(config));
 }
-
-export const makeWhatsAppHttpClient = (
-  config: WhatsAppConfig,
-  httpClient: HttpClient.HttpClient
-): WhatsAppHttpClient => new WhatsAppHttpClient(config, httpClient);

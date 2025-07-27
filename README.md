@@ -1,199 +1,95 @@
 # WhatsApp Business API SDK
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![npm version](https://badge.fury.io/js/%40formmy%2Fwhatsapp-sdk.svg)](https://badge.fury.io/js/%40formmy%2Fwhatsapp-sdk)
-[![Effect-TS](https://img.shields.io/badge/built%20with-Effect--TS-8A2BE2)](https://effect.website/)
+A TypeScript SDK for interacting with the WhatsApp Business API, built with Effect for type-safety and functional programming patterns.
 
-Un SDK de TypeScript para la API de WhatsApp Business, construido con Effect-TS para manejo de efectos y errores de manera segura.
+## Features
 
-## Características
+- Type-safe API client for WhatsApp Business API
+- Built with [Effect](https://effect.website/) for better error handling and functional programming
+- Support for sending messages, media, and handling webhooks
+- Fully typed API responses and request payloads
 
-- ✅ Envío de mensajes de texto
-- ✅ Envío de imágenes, documentos, audio y video
-- ✅ Plantillas de mensajes
-- ✅ Manejo de errores tipado
-- ✅ Validación de entradas
-- ✅ Reintentos automáticos
-- ✅ Totalmente tipado con TypeScript
-- ✅ Basado en Effect-TS para programación funcional segura
-
-## Instalación
+## Installation
 
 ```bash
-npm install @formmy/whatsapp-sdk effect @effect/platform
+npm install @formmy/whatsapp-sdk
 ```
 
-## Uso básico
+## Usage
 
-### Configuración
+### Basic Setup
 
 ```typescript
-import { Effect } from "effect";
-import { createWhatsAppClient } from "@formmy/whatsapp-sdk";
+import { WhatsAppHttpClient, makeWhatsAppHttpClient } from '@formmy/whatsapp-sdk';
+import { Effect, pipe } from 'effect';
 
-// Crear un cliente HTTP (usando @effect/platform)
-const httpClient = new HttpClient.fetch();
-
-// Configuración
+// Create a client instance
 const config = {
-  phoneNumberId: "TU_NUMERO_DE_TELEFONO",
-  accessToken: "TU_TOKEN_DE_ACCESO",
-  businessAccountId: "TU_ID_DE_CUENTA_DE_NEGOCIO", // Opcional
+  phoneNumberId: 'YOUR_PHONE_NUMBER_ID',
+  accessToken: 'YOUR_ACCESS_TOKEN',
+  // Optional: defaults to 'https://graph.facebook.com'
+  baseUrl: 'https://graph.facebook.com',
+  // Optional: defaults to 'v17.0'
+  apiVersion: 'v17.0'
 };
 
-// Crear el cliente de WhatsApp
-const program = createWhatsAppClient(config, httpClient).pipe(
-  Effect.flatMap((whatsapp) => {
-    // Usar el cliente para enviar un mensaje
-    return whatsapp.sendTextMessage(
-      "1234567890", // Número de teléfono del destinatario
-      "¡Hola desde el SDK de WhatsApp!"
-    );
-  })
+const client = makeWhatsAppHttpClient(config);
+
+// Send a text message
+const sendMessage = pipe(
+  client.sendTextMessage('1234567890', 'Hello from Effect!'),
+  Effect.flatMap(response => Effect.log(`Message sent with ID: ${response.messages[0].id}`)),
+  Effect.catchAll(error => Effect.logError(`Failed to send message: ${error.message}`))
 );
 
-// Ejecutar el programa
-Effect.runPromise(program).then(console.log).catch(console.error);
+// Run the effect
+Effect.runPromise(sendMessage);
 ```
 
-### Uso con variables de entorno
+### Using with Effect Layers
 
 ```typescript
-import { Effect } from "effect";
-import { loadConfig } from "@formmy/whatsapp-sdk";
+import { WhatsAppHttpClient, makeWhatsAppHttpClient } from '@formmy/whatsapp-sdk';
+import { Effect, Layer, pipe } from 'effect';
 
-const program = Effect.gen(function* (_) {
-  // Cargar configuración desde variables de entorno
-  const config = yield* _(loadConfig());
-  
-  // Crear cliente HTTP
-  const httpClient = new HttpClient.fetch();
-  
-  // Crear cliente de WhatsApp
-  const whatsapp = yield* _(createWhatsAppClient(config, httpClient));
-  
-  // Enviar mensaje
-  return yield* _(whatsapp.sendTextMessage(
-    "1234567890",
-    "Mensaje enviado usando variables de entorno"
-  ));
+// Create a layer with your configuration
+const WhatsAppLive = WhatsAppHttpClient.Live({
+  phoneNumberId: 'YOUR_PHONE_NUMBER_ID',
+  accessToken: 'YOUR_ACCESS_TOKEN'
 });
 
-// Ejecutar
-Effect.runPromise(program).then(console.log).catch(console.error);
+// Enviar mensaje de texto
+await client.sendTextMessage('1234567890', '¡Hola desde WhatsApp!');
 ```
 
-## API
+## Métodos Principales
 
-### WhatsAppClient
+### `sendTextMessage(numero, texto)`
+Envía un mensaje de texto.
 
-Interfaz principal para interactuar con la API de WhatsApp.
+### `uploadMedia({data, type})`
+Sube archivos multimedia.
 
-#### Métodos
+### `getMediaInfo(id)`
+Obtiene información de un archivo.
 
-- `sendTextMessage(phoneNumber: string, text: string, previewUrl?: boolean): Effect<MessageResponse>`
-- `sendImageMessage(phoneNumber: string, mediaIdOrUrl: string, caption?: string): Effect<MessageResponse>`
-- `sendTemplateMessage(phoneNumber: string, templateName: string, languageCode: string, components?: any[]): Effect<MessageResponse>`
-- `uploadMedia(file: Buffer, type: string): Effect<MediaUploadResponse>`
-- `getMedia(mediaId: string): Effect<MediaInfoResponse>`
-- `downloadMedia(mediaUrl: string): Effect<Buffer>`
+### `downloadMedia(url)`
+Descarga archivos multimedia.
 
-## Configuración
-
-El SDK puede configurarse mediante un objeto de configuración o variables de entorno:
-
-### Opciones de configuración
-
-| Opción | Tipo | Requerido | Descripción |
-|--------|------|-----------|-------------|
-| `phoneNumberId` | string | Sí | ID del número de teléfono de WhatsApp Business |
-| `accessToken` | string | Sí | Token de acceso de la API de WhatsApp |
-| `apiVersion` | string | No | Versión de la API (por defecto: "v17.0") |
-| `businessAccountId` | string | No | ID de la cuenta de negocio de WhatsApp |
-| `webhookVerifyToken` | string | No | Token para verificar webhooks |
-| `maxRetries` | number | No | Número máximo de reintentos (por defecto: 3) |
-| `retryDelayMs` | number | No | Tiempo de espera entre reintentos en ms (por defecto: 1000) |
-| `baseUrl` | string | No | URL base de la API (por defecto: "https://graph.facebook.com") |
-
-### Variables de entorno
-
-- `WHATSAPP_PHONE_NUMBER_ID`
-- `WHATSAPP_ACCESS_TOKEN`
-- `WHATSAPP_API_VERSION` (opcional)
-- `WHATSAPP_BUSINESS_ACCOUNT_ID` (opcional)
-- `WHATSAPP_WEBHOOK_VERIFY_TOKEN` (opcional)
-- `WHATSAPP_MAX_RETRIES` (opcional)
-- `WHATSAPP_RETRY_DELAY_MS` (opcional)
-- `WHATSAPP_BASE_URL` (opcional)
-
-## Manejo de errores
-
-El SDK utiliza Effect-TS para el manejo de errores. Todos los métodos devuelven un `Effect` que puede fallar con errores tipados:
-
-- `WhatsAppError` - Clase base para todos los errores del SDK
-- `ApiError` - Errores de la API de WhatsApp
-- `ValidationError` - Errores de validación de entrada
-- `ConfigurationError` - Errores de configuración
-
-Ejemplo de manejo de errores:
+## Ejemplo Completo
 
 ```typescript
-import { Effect, pipe } from "effect";
-import { WhatsAppError, ValidationError, ApiError } from "@formmy/whatsapp-sdk";
+// Enviar texto
+await client.sendTextMessage('5215551234567', '¡Hola!');
 
-const result = await pipe(
-  whatsapp.sendTextMessage("invalid", "Hola"),
-  Effect.catchAll((error) => {
-    if (error instanceof ValidationError) {
-      console.error("Error de validación:", error.message);
-    } else if (error instanceof ApiError) {
-      console.error("Error de la API:", error.message);
-    } else if (error instanceof WhatsAppError) {
-      console.error("Error de WhatsApp:", error.message);
-    }
-    return Effect.fail(error);
-  }),
-  Effect.runPromise
-);
-```
-
-## Desarrollo
-
-### Requisitos
-
-- Node.js 18+
-- npm 9+
-
-### Instalación de dependencias
-
-```bash
-npm install
-```
-
-### Construir el proyecto
-
-```bash
-npm run build
-```
-
-### Ejecutar pruebas
-
-```bash
-npm test
-```
-
-### Linting
-
-```bash
-npm run lint
-```
-
-### Formateo de código
-
-```bash
-npm run format
+// Subir imagen
+const imagen = fs.readFileSync('foto.jpg');
+const { id } = await client.uploadMedia({
+  data: new Uint8Array(imagen),
+  type: 'image/jpeg'
+});
 ```
 
 ## Licencia
 
-MIT © [Formmy](https://formmy.app)
+MIT

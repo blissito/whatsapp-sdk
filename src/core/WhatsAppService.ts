@@ -1,102 +1,48 @@
-import { Effect, pipe } from "effect";
-import * as Schema from "@effect/schema/Schema";
-import { WhatsAppHttpClient } from "../http/WhatsAppHttpClient";
-import { WhatsAppConfig, WhatsAppClient, MessageResponse } from "./types";
-import { validatePhoneNumber, validateMessageText } from "../validations";
-import { createTextMessageRequest } from "../utils/messageBuilders";
+import { Effect } from "effect";
+import { WhatsAppConfig } from "./types";
+import { makeWhatsAppHttpClient } from "../http/WhatsAppHttpClient";
 
-export class WhatsAppServiceImpl implements WhatsAppClient {
-  private httpClient: WhatsAppHttpClient;
-
-  constructor(
-    private readonly config: WhatsAppConfig,
-    httpClient: WhatsAppHttpClient
-  ) {
-    this.httpClient = httpClient;
-  }
-
-  /**
-   * Envía un mensaje de texto a un número de teléfono
-   */
-  sendTextMessage(
-    phoneNumber: string,
-    text: string
-  ): Effect.Effect<MessageResponse, WhatsAppError> {
-    return Effect.gen(function* (_) {
-      // Validar número de teléfono
-      const validPhone = yield* _(
-        validatePhoneNumber(phoneNumber).pipe(
-          Effect.mapError(
-            (error) =>
-              new ValidationError("Invalid phone number", {
-                phoneNumber,
-                error: error.message,
-              })
-          )
-        )
-      );
-
-      // Validar texto del mensaje
-      const validText = yield* _(
-        validateMessageText(text).pipe(
-          Effect.mapError(
-            (error) =>
-              new ValidationError("Invalid message text", {
-                text,
-                error: error.message,
-              })
-          )
-        )
-      );
-
-      // Crear y enviar el mensaje
-      const messageRequest = createTextMessageRequest(validPhone, validText);
-      
-      const response = yield* _(
-        this.httpClient.sendMessage(messageRequest).pipe(
-          Effect.mapError(
-            (error) =>
-              new WhatsAppError("Failed to send message", {
-                cause: error,
-                code: "MESSAGE_SEND_FAILED",
-              })
-          )
-        )
-      );
-
-      return response;
-    }).pipe(Effect.provide(this));
-  }
-
-  // Implementar otros métodos del cliente aquí...
-  // - sendMediaMessage
-  // - sendTemplateMessage
-  // - downloadMedia
-  // - etc.
+// Servicio mejorado con API más amigable
+export interface WhatsAppService {
+  sendTextMessage: (phoneNumber: string, message: string) => 
+    Effect.Effect<{ messageId: string }, Error>;
+  
+  uploadMedia: (file: Uint8Array, mimeType: string) => 
+    Effect.Effect<{ mediaId: string }, Error>;
+  
+  getMediaInfo: (mediaId: string) => 
+    Effect.Effect<{ id: string; mimeType: string; size: number; url: string }, Error>;
+  
+  downloadMedia: (url: string) => 
+    Effect.Effect<Uint8Array, Error>;
 }
 
-/**
- * Crea una nueva instancia del servicio de WhatsApp
- */
-export const makeWhatsAppService = (
-  config: WhatsAppConfig,
-  httpClient: WhatsAppHttpClient
-): WhatsAppClient => new WhatsAppServiceImpl(config, httpClient);
-
-/**
- * Crea un cliente de WhatsApp con la configuración por defecto
- */
-export const createWhatsAppClient = (
-  config: Partial<WhatsAppConfig>,
-  httpClient: HttpClient.HttpClient
-): Effect.Effect<WhatsAppClient, ConfigurationError> =>
-  Effect.gen(function* (_) {
-    // Cargar configuración
-    const finalConfig = yield* _(makeConfig(config));
+// Factory function para crear el servicio
+export const createWhatsAppService = (config: WhatsAppConfig): WhatsAppService => {
+  const client = makeWhatsAppHttpClient(config);
+  
+  return {
+    sendTextMessage: (phoneNumber: string, message: string) =>
+      client.sendTextMessage(phoneNumber, message).pipe(
+        Effect.map(response => ({ messageId: response.messages[0].id }))
+      ),
     
-    // Crear cliente HTTP
-    const whatsappHttpClient = makeWhatsAppHttpClient(finalConfig, httpClient);
+    uploadMedia: (file: Uint8Array, mimeType: string) =>
+      client.uploadMedia({ data: file, type: mimeType }).pipe(
+        Effect.map(response => ({ mediaId: response.id }))
+      ),
     
-    // Crear y retornar el servicio
-    return makeWhatsAppService(finalConfig, whatsappHttpClient);
-  });
+    getMediaInfo: (mediaId: string) =>
+      client.getMediaInfo(mediaId).pipe(
+        Effect.map(response => ({
+          id: response.id,
+          mimeType: response.mime_type,
+          size: response.file_size,
+          url: response.url
+        }))
+      ),
+    
+    downloadMedia: (url: string) =>
+      client.downloadMedia(url)
+  };
+};

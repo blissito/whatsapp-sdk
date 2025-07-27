@@ -1,17 +1,6 @@
-// Core types and interfaces
 export * from "./core/types";
-
-// HTTP Client
 export * from "./http/WhatsAppHttpClient";
-
-// Re-export commonly used Effect types for convenience
 export { Effect, Layer, Context, pipe } from "effect";
-
-// Export common schemas
 export * as Schema from "@effect/schema";
-
-// Export platform HTTP client for advanced usage
 export * as HttpClient from "@effect/platform/HttpClient";
-
-// Export platform HTTP request builder
 export * as HttpRequest from "@effect/platform/HttpClientRequest";
