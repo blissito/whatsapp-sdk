@@ -1,6 +1,8 @@
-# WhatsApp SDK
+# WhatsApp SDK 💪✨
 
 SDK simple para enviar mensajes por WhatsApp Business API.
+
+> ⚡ **Hecho con [Effect](https://effect.website/)** - Porque los errores no deberían ser sorpresas, sino... ¡efectos! (Sí, somos fans de la programación funcional y no nos da pena admitirlo 😎)
 
 ## Instalación
 
