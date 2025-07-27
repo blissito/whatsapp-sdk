@@ -2,7 +2,7 @@
 
 SDK simple para enviar mensajes por WhatsApp Business API. Made by: @blissito for formmy.app
 
-> ⚡ **Hecho con [Effect](https://effect.website/)** - Porque los errores no deberían ser sorpresas, sino... ¡efectos! (Sí, somos fans de la programación funcional y no nos da pena admitirlo 😎)
+> ⚡ **Hecho con [Effect](https://effect.website/)** - Porque los errores no deberían ser sorpresas, sino... ¡efectos! (Sí, fan de la programación funcional y no me da pena admitirlo 😎)
 
 ## Instalación
 
