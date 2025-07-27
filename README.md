@@ -1,6 +1,6 @@
 # WhatsApp SDK 📡✨
 
-SDK simple para enviar mensajes por WhatsApp Business API.
+SDK simple para enviar mensajes por WhatsApp Business API. Made by: @blissito for formmy.app
 
 > ⚡ **Hecho con [Effect](https://effect.website/)** - Porque los errores no deberían ser sorpresas, sino... ¡efectos! (Sí, somos fans de la programación funcional y no nos da pena admitirlo 😎)
 
@@ -55,7 +55,7 @@ async function manejarPedidoCompleto(cliente: string, pedido: any) {
   // Mostrar menú con imágenes
   const menuImage = fs.readFileSync("menu-pizzas.jpg");
   const { mediaId } = await whatsapp.uploadMedia(menuImage, "image/jpeg");
-  
+
   await whatsapp.sendTextMessage(
     cliente,
     `📋 Aquí está nuestro menú. ¿Qué pizza te gustaría?\n\nEjemplo: "Quiero una grande de pepperoni con extra queso"`
@@ -79,7 +79,10 @@ async function manejarPedidoCompleto(cliente: string, pedido: any) {
 
   // 5. Imagen de preparación
   const preparacionImage = fs.readFileSync("pizza-preparacion.jpg");
-  const { mediaId: prepMediaId } = await whatsapp.uploadMedia(preparacionImage, "image/jpeg");
+  const { mediaId: prepMediaId } = await whatsapp.uploadMedia(
+    preparacionImage,
+    "image/jpeg"
+  );
 
   // 6. Envío
   await whatsapp.sendTextMessage(
@@ -99,7 +102,7 @@ const pedidoEjemplo = {
   pizza: "Pepperoni con extra queso",
   tamaño: "Grande",
   direccion: "Calle Principal 123",
-  total: 289.50
+  total: 289.5,
 };
 
 // Ejecutar el flujo completo
