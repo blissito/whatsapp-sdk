@@ -1,4 +1,4 @@
-# WhatsApp SDK 💪✨
+# WhatsApp SDK 📡✨
 
 SDK simple para enviar mensajes por WhatsApp Business API.
 
@@ -13,17 +13,17 @@ npm install @hectorbliss/whatsapp-sdk
 ## Uso básico
 
 ```typescript
-import { createWhatsAppService } from '@hectorbliss/whatsapp-sdk';
+import { createWhatsAppService } from "@hectorbliss/whatsapp-sdk";
 
 // Configura tu cliente
 const whatsapp = createWhatsAppService({
-  phoneNumberId: 'TU_PHONE_NUMBER_ID',
-  accessToken: 'TU_ACCESS_TOKEN'
+  phoneNumberId: "TU_PHONE_NUMBER_ID",
+  accessToken: "TU_ACCESS_TOKEN",
 });
 
 // Envía un mensaje
-const result = await whatsapp.sendTextMessage('5215551234567', '¡Hola!');
-console.log('Mensaje enviado:', result.messageId);
+const result = await whatsapp.sendTextMessage("5215551234567", "¡Hola!");
+console.log("Mensaje enviado:", result.messageId);
 ```
 
 ## Funciones principales
@@ -37,11 +37,11 @@ console.log('Mensaje enviado:', result.messageId);
 
 ```typescript
 // Texto simple
-await whatsapp.sendTextMessage('5215551234567', '¡Bienvenido!');
+await whatsapp.sendTextMessage("5215551234567", "¡Bienvenido!");
 
 // Con imagen
-const imagen = fs.readFileSync('foto.jpg');
-const media = await whatsapp.uploadMedia(imagen, 'image/jpeg');
+const imagen = fs.readFileSync("foto.jpg");
+const media = await whatsapp.uploadMedia(imagen, "image/jpeg");
 ```
 
 ## Documentación avanzada
